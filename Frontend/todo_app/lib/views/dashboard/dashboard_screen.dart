@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../detail/detail_screen.dart';
 
 // --- MÔ HÌNH DỮ LIỆU TASK NÂNG CAO ---
 class TaskItem {
@@ -124,15 +125,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
       // NÚT THÊM VIỆC (Handover cho Biên)
+      // NÚT THÊM VIỆC (Đã kết nối sang màn hình của Biên)
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
-          // Placeholder message: Sau này Biên sẽ code chuyển trang ở đây
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Chuyển trang "Chi tiết" (Biên) để nhập liệu thực tế...',
-              ),
-            ),
+          // Lệnh chuyển hướng sang màn hình Detail Screen
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const DetailScreen()),
           );
         },
         backgroundColor: Colors.blueAccent,
