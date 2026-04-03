@@ -32,6 +32,11 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  // BIẾN QUẢN LÝ (MỚI THÊM: SEARCH CONTROLLER & QUERY)
+  String _selectedMenu = "Tất cả";
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = "";
+
   // DỮ LIỆU GIẢ LẬP ĐẦY ĐỦ (MOCK DATA)
   List<TaskItem> myTasks = [
     TaskItem(
@@ -81,14 +86,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // LOGIC LỌC DANH SÁCH: KẾT HỢP SIDEBAR + TÌM KIẾM (MỚI)
+    final displayTasks = myTasks.where((task) {
+      // 1. Kiểm tra từ khóa tìm kiếm
+      bool matchesSearch = task.title.toLowerCase().contains(
+        _searchQuery.toLowerCase(),
+      );
+
+      // 2. Kiểm tra danh mục sidebar
+      bool matchesMenu = true;
+      if (_selectedMenu == "Quan trọng") matchesMenu = task.isImportant;
+      if (_selectedMenu == "Sắp đến hạn") matchesMenu = !task.isDone;
+
+      return matchesSearch && matchesMenu;
+    }).toList();
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FD),
       body: Row(
         children: [
-          // 1. SIDEBAR NÂNG CẤP
           _buildSidebar(),
-
-          // 2. MAIN CONTENT
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(25.0),
@@ -97,23 +114,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   _buildHeader(),
                   const SizedBox(height: 30),
-                  // Ô THỐNG KÊ TỰ ĐỘNG CẬP NHẬT
                   _buildStatCards(),
                   const SizedBox(height: 30),
-                  const Text(
-                    "Công việc cần làm",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  Text(
+                    _searchQuery.isEmpty
+                        ? "Công việc cần làm ($_selectedMenu)"
+                        : "Kết quả tìm kiếm cho: '$_searchQuery'",
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 15),
-
-                  // DANH SÁCH TASK TƯƠNG TÁC CAO
                   Expanded(
                     child: ListView.separated(
-                      itemCount: myTasks.length,
+                      itemCount: displayTasks.length,
                       separatorBuilder: (context, index) =>
                           const SizedBox(height: 12),
                       itemBuilder: (context, index) {
-                        final task = myTasks[index];
+                        final task = displayTasks[index];
                         return _buildAdvancedTaskCard(task, index);
                       },
                     ),
@@ -124,15 +143,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      // NÚT THÊM VIỆC (Handover cho Biên)
-      // NÚT THÊM VIỆC (Đã kết nối sang màn hình của Biên)
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          // Lệnh chuyển hướng sang màn hình Detail Screen
-          Navigator.push(
+        onPressed: () async {
+          final result = await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const DetailScreen()),
           );
+
+          if (result != null && result is Map) {
+            setState(() {
+              myTasks.insert(
+                0,
+                TaskItem(
+                  id: DateTime.now().toString(),
+                  title: result['title'],
+                  deadline: result['deadline'],
+                  category: result['isImportant'] ? "Việc gấp" : "Học tập",
+                  catColor: result['isImportant'] ? Colors.red : Colors.blue,
+                  isImportant: result['isImportant'],
+                  hasReminder: true,
+                ),
+              );
+            });
+          }
         },
         backgroundColor: Colors.blueAccent,
         icon: const Icon(Icons.add, color: Colors.white),
@@ -144,11 +177,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // WIDGET: Thẻ công việc nâng cao (có Tích chọn + Vuốt để xóa)
   Widget _buildAdvancedTaskCard(TaskItem task, int index) {
     return Dismissible(
       key: Key(task.id),
-      direction: DismissDirection.endToStart, // Chỉ cho vuốt sang trái để xóa
+      direction: DismissDirection.endToStart,
       background: Container(
         padding: const EdgeInsets.only(right: 20),
         alignment: Alignment.centerRight,
@@ -160,7 +192,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       onDismissed: (direction) {
         setState(() {
-          myTasks.removeAt(index); // Xóa khỏi danh sách thật
+          myTasks.remove(task);
         });
         ScaffoldMessenger.of(
           context,
@@ -183,14 +215,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             horizontal: 15,
             vertical: 10,
           ),
-          // Checkbox (Interactive)
           leading: Checkbox(
             value: task.isDone,
             activeColor: Colors.green,
             shape: const CircleBorder(),
             onChanged: (bool? newValue) {
               setState(() {
-                task.isDone = newValue ?? false; // Cập nhật trạng thái
+                task.isDone = newValue ?? false;
               });
             },
           ),
@@ -229,9 +260,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          // PHẦN NÀY ĐÃ ĐƯỢC CHUYỂN SANG HÀNG NGANG (ROW) ĐỂ KHÔNG BAO GIỜ BỊ TRÀN VIỀN
           trailing: Row(
-            mainAxisSize: MainAxisSize.min, // Ôm sát nội dung
+            mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -251,7 +281,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
               ),
-              const SizedBox(width: 10), // Khoảng cách giữa nhãn và chuông
+              const SizedBox(width: 10),
               Icon(
                 task.hasReminder
                     ? Icons.notifications_active
@@ -266,7 +296,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // --- CÁC HÀM XÂY DỰNG GIAO DIỆN PHỤ (GIỮ NGUYÊN ĐẸP Y HỆT LÚC ĐẦU) ---
   Widget _buildHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -278,8 +307,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         SizedBox(
           width: 300,
           child: TextField(
+            controller: _searchController, // Gắn Controller vào đây
+            onChanged: (value) {
+              setState(() {
+                _searchQuery = value; // Cập nhật Query để lọc Real-time
+              });
+            },
             decoration: InputDecoration(
-              hintText: "Tìm kiếm...",
+              hintText: "Tìm kiếm công việc...",
               prefixIcon: const Icon(Icons.search),
               fillColor: Colors.white,
               filled: true,
@@ -322,32 +357,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 40),
-          _sidebarItem(Icons.all_inbox, "Tất cả", true),
-          _sidebarItem(Icons.star_outline, "Quan trọng", false),
-          _sidebarItem(Icons.access_time, "Sắp đến hạn", false),
+          _sidebarItem(Icons.all_inbox, "Tất cả"),
+          _sidebarItem(Icons.star_outline, "Quan trọng"),
+          _sidebarItem(Icons.access_time, "Sắp đến hạn"),
         ],
       ),
     );
   }
 
-  Widget _sidebarItem(IconData icon, String title, bool isSelected) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: isSelected ? Colors.white.withOpacity(0.1) : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListTile(
-        leading: Icon(icon, color: isSelected ? Colors.blue : Colors.grey),
-        title: Text(
-          title,
-          style: TextStyle(color: isSelected ? Colors.white : Colors.grey),
+  Widget _sidebarItem(IconData icon, String title) {
+    bool isSelected = _selectedMenu == title;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedMenu = title;
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.white.withOpacity(0.1)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: ListTile(
+          leading: Icon(icon, color: isSelected ? Colors.blue : Colors.grey),
+          title: Text(
+            title,
+            style: TextStyle(color: isSelected ? Colors.white : Colors.grey),
+          ),
         ),
       ),
     );
   }
 
-  // Widget Thống kê
   Widget _buildStatCards() {
     int completedCount = myTasks.where((t) => t.isDone).length;
     int pendingCount = myTasks.length - completedCount;
