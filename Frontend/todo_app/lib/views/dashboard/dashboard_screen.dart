@@ -7,7 +7,7 @@ class TaskItem {
   String title;
   String deadline;
   String category;
-  String projectName; // <-- THÊM: Để biết thuộc dự án nào
+  String projectName;
   Color catColor;
   bool isImportant;
   bool hasReminder;
@@ -18,7 +18,7 @@ class TaskItem {
     required this.title,
     required this.deadline,
     required this.category,
-    required this.projectName, // <-- THÊM
+    required this.projectName,
     required this.catColor,
     this.isImportant = false,
     this.hasReminder = false,
@@ -39,7 +39,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
 
-  // DỮ LIỆU GIẢ LẬP ĐẦY ĐỦ (MOCK DATA) - Đã cập nhật projectName
+  // <-- THÊM MỚI: Biến lưu trạng thái đóng/mở của từng dự án
+  final Map<String, bool> _expandedStates = {};
+
+  // DỮ LIỆU GIẢ LẬP ĐẦY ĐỦ (MOCK DATA)
   List<TaskItem> myTasks = [
     TaskItem(
       id: "1",
@@ -150,12 +153,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         List<TaskItem> tasksInProject = groupedTasks[project]!;
 
                         return Theme(
-                          // Ẩn hai cái gạch viền xấu xí mặc định của ExpansionTile
                           data: Theme.of(
                             context,
                           ).copyWith(dividerColor: Colors.transparent),
                           child: ExpansionTile(
-                            initiallyExpanded: true, // Mặc định mở
+                            // <-- SỬA Ở ĐÂY: Thêm Key và Logic nhớ trạng thái
+                            key: Key(project),
+                            initiallyExpanded:
+                                _expandedStates[project] ??
+                                true, // Lấy trạng thái đã lưu, nếu chưa có thì mặc định mở (true)
+                            onExpansionChanged: (isExpanded) {
+                              _expandedStates[project] =
+                                  isExpanded; // Lưu lại trạng thái khi ông bấm thu/phóng
+                            },
                             iconColor: Colors.blueAccent,
                             collapsedIconColor: Colors.grey,
                             tilePadding: const EdgeInsets.symmetric(
@@ -187,7 +197,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
-                                    "${tasksInProject.length}", // Hiện số lượng việc trong dự án
+                                    "${tasksInProject.length}",
                                     style: const TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
@@ -197,7 +207,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ],
                             ),
                             children: tasksInProject.map((task) {
-                              // Giữ nguyên thiết kế Card cũ của ông, chỉ bọc thêm Padding để cách nhau
                               return Padding(
                                 padding: const EdgeInsets.only(bottom: 12.0),
                                 child: _buildAdvancedTaskCard(task),
@@ -218,7 +227,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         onPressed: () async {
           final result = await Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const DetailScreen()),
+            MaterialPageRoute(
+              builder: (context) =>
+                  DetailScreen(existingProjects: groupedTasks.keys.toList()),
+            ),
           );
 
           if (result != null && result is Map) {
@@ -229,7 +241,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   id: DateTime.now().toString(),
                   title: result['title'],
                   deadline: result['deadline'],
-                  // NHẬN DỮ LIỆU TỪ BIÊN (Hoặc gán mặc định nếu rỗng)
                   projectName: result['projectName']?.isNotEmpty == true
                       ? result['projectName']
                       : "Việc cá nhân khác",
@@ -252,7 +263,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // HÀM NÀY GIỮ NGUYÊN GIAO DIỆN CỦA ÔNG 100%
   Widget _buildAdvancedTaskCard(TaskItem task) {
     return Dismissible(
       key: Key(task.id),
