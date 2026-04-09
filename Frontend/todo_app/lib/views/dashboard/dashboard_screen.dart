@@ -7,6 +7,7 @@ class TaskItem {
   String title;
   String deadline;
   String category;
+  String projectName; // <-- THÊM: Để biết thuộc dự án nào
   Color catColor;
   bool isImportant;
   bool hasReminder;
@@ -17,6 +18,7 @@ class TaskItem {
     required this.title,
     required this.deadline,
     required this.category,
+    required this.projectName, // <-- THÊM
     required this.catColor,
     this.isImportant = false,
     this.hasReminder = false,
@@ -32,18 +34,19 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // BIẾN QUẢN LÝ (MỚI THÊM: SEARCH CONTROLLER & QUERY)
+  // BIẾN QUẢN LÝ
   String _selectedMenu = "Tất cả";
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
 
-  // DỮ LIỆU GIẢ LẬP ĐẦY ĐỦ (MOCK DATA)
+  // DỮ LIỆU GIẢ LẬP ĐẦY ĐỦ (MOCK DATA) - Đã cập nhật projectName
   List<TaskItem> myTasks = [
     TaskItem(
       id: "1",
       title: "Thiết kế UI Dashboard BTL",
       deadline: "Hôm nay, 14:00",
       category: "Học tập",
+      projectName: "Dự án BTL Flutter",
       catColor: Colors.blue,
       isImportant: true,
       hasReminder: true,
@@ -53,53 +56,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
       title: "Gửi báo cáo giữa kỳ cho thầy",
       deadline: "Mai, 09:00",
       category: "Việc gấp",
+      projectName: "Dự án BTL Flutter",
       catColor: Colors.red,
       isImportant: true,
       hasReminder: true,
     ),
     TaskItem(
       id: "3",
-      title: "Mua tài liệu Flutter nâng cao",
-      deadline: "05/04/2026",
+      title: "Lau dọn phòng ngủ",
+      deadline: "Hôm nay, 18:00",
       category: "Cá nhân",
+      projectName: "Việc nhà",
       catColor: Colors.green,
       hasReminder: false,
       isDone: true,
     ),
     TaskItem(
       id: "4",
-      title: "Họp nhóm với Biên phân chia việc",
+      title: "Đi siêu thị mua đồ ăn",
       deadline: "Hôm nay, 20:00",
-      category: "Học tập",
-      catColor: Colors.blue,
+      category: "Cá nhân",
+      projectName: "Việc nhà",
+      catColor: Colors.green,
       hasReminder: true,
     ),
     TaskItem(
       id: "5",
-      title: "Làm slide thuyết trình BTL",
+      title: "Làm slide thuyết trình",
       deadline: "Tuần sau",
       category: "Học tập",
-      catColor: Colors.blue,
+      projectName: "Môn Kỹ năng mềm",
+      catColor: Colors.purple,
       hasReminder: false,
     ),
   ];
 
   @override
   Widget build(BuildContext context) {
-    // LOGIC LỌC DANH SÁCH: KẾT HỢP SIDEBAR + TÌM KIẾM (MỚI)
+    // 1. LỌC DANH SÁCH THEO TÌM KIẾM VÀ SIDEBAR
     final displayTasks = myTasks.where((task) {
-      // 1. Kiểm tra từ khóa tìm kiếm
       bool matchesSearch = task.title.toLowerCase().contains(
         _searchQuery.toLowerCase(),
       );
 
-      // 2. Kiểm tra danh mục sidebar
       bool matchesMenu = true;
       if (_selectedMenu == "Quan trọng") matchesMenu = task.isImportant;
       if (_selectedMenu == "Sắp đến hạn") matchesMenu = !task.isDone;
 
       return matchesSearch && matchesMenu;
     }).toList();
+
+    // 2. GOM NHÓM THEO TÊN DỰ ÁN (PROJECT NAME)
+    Map<String, List<TaskItem>> groupedTasks = {};
+    for (var task in displayTasks) {
+      if (!groupedTasks.containsKey(task.projectName)) {
+        groupedTasks[task.projectName] = [];
+      }
+      groupedTasks[task.projectName]!.add(task);
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FD),
@@ -126,14 +140,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 15),
+
+                  // 3. HIỂN THỊ DANH SÁCH DẠNG XỔ XUỐNG (ACCORDION)
                   Expanded(
-                    child: ListView.separated(
-                      itemCount: displayTasks.length,
-                      separatorBuilder: (context, index) =>
-                          const SizedBox(height: 12),
+                    child: ListView.builder(
+                      itemCount: groupedTasks.keys.length,
                       itemBuilder: (context, index) {
-                        final task = displayTasks[index];
-                        return _buildAdvancedTaskCard(task, index);
+                        String project = groupedTasks.keys.elementAt(index);
+                        List<TaskItem> tasksInProject = groupedTasks[project]!;
+
+                        return Theme(
+                          // Ẩn hai cái gạch viền xấu xí mặc định của ExpansionTile
+                          data: Theme.of(
+                            context,
+                          ).copyWith(dividerColor: Colors.transparent),
+                          child: ExpansionTile(
+                            initiallyExpanded: true, // Mặc định mở
+                            iconColor: Colors.blueAccent,
+                            collapsedIconColor: Colors.grey,
+                            tilePadding: const EdgeInsets.symmetric(
+                              horizontal: 0,
+                            ),
+                            title: Row(
+                              children: [
+                                const Icon(
+                                  Icons.folder_open,
+                                  color: Colors.blueAccent,
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  project,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[200],
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    "${tasksInProject.length}", // Hiện số lượng việc trong dự án
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            children: tasksInProject.map((task) {
+                              // Giữ nguyên thiết kế Card cũ của ông, chỉ bọc thêm Padding để cách nhau
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 12.0),
+                                child: _buildAdvancedTaskCard(task),
+                              );
+                            }).toList(),
+                          ),
+                        );
                       },
                     ),
                   ),
@@ -158,6 +229,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   id: DateTime.now().toString(),
                   title: result['title'],
                   deadline: result['deadline'],
+                  // NHẬN DỮ LIỆU TỪ BIÊN (Hoặc gán mặc định nếu rỗng)
+                  projectName: result['projectName']?.isNotEmpty == true
+                      ? result['projectName']
+                      : "Việc cá nhân khác",
                   category: result['isImportant'] ? "Việc gấp" : "Học tập",
                   catColor: result['isImportant'] ? Colors.red : Colors.blue,
                   isImportant: result['isImportant'],
@@ -177,7 +252,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildAdvancedTaskCard(TaskItem task, int index) {
+  // HÀM NÀY GIỮ NGUYÊN GIAO DIỆN CỦA ÔNG 100%
+  Widget _buildAdvancedTaskCard(TaskItem task) {
     return Dismissible(
       key: Key(task.id),
       direction: DismissDirection.endToStart,
@@ -307,10 +383,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         SizedBox(
           width: 300,
           child: TextField(
-            controller: _searchController, // Gắn Controller vào đây
+            controller: _searchController,
             onChanged: (value) {
               setState(() {
-                _searchQuery = value; // Cập nhật Query để lọc Real-time
+                _searchQuery = value;
               });
             },
             decoration: InputDecoration(
