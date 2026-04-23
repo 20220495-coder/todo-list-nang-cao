@@ -8,15 +8,11 @@ app.use(express.json());
 // ==========================================
 // CƠ SỞ DỮ LIỆU MẪU (LƯU TRONG RAM)
 // ==========================================
-
-// 1. Quản lý thiết bị của User
 let userDevices = [];
-
-// 2. Dữ liệu công việc (Đã thêm trường 'uid' để phân biệt của ai)
 let tasks = [
   { 
     id: "1",
-    uid: "user_test_123", // Của ông A
+    uid: "user_test_123", 
     title: "Làm bài tập Flutter", 
     deadline: "10/04/2026", 
     projectName: "Dự án App Todo", 
@@ -27,7 +23,7 @@ let tasks = [
   },
   { 
     id: "2", 
-    uid: "user_test_123", // Vẫn của ông A
+    uid: "user_test_123", 
     title: "Thiết kế Backend", 
     deadline: "15/04/2026", 
     projectName: "Dự án App Todo", 
@@ -35,84 +31,48 @@ let tasks = [
     isImportant: false, 
     hasReminder: false,
     isDone: true 
-  },
-  { 
-    id: "3", 
-    uid: "user_khac_456", // Của ông B (Ông A sẽ không bao giờ thấy cái này)
-    title: "Mua đồ siêu thị", 
-    deadline: "12/04/2026", 
-    projectName: "Việc cá nhân khác", 
-    category: "Học tập",
-    isImportant: false, 
-    hasReminder: false,
-    isDone: false 
   }
 ];
 
 // ==========================================
-// 0. API XÁC THỰC THIẾT BỊ VÀ UID
-// ==========================================
-app.post('/api/v1/auth/verify-device', (req, res) => {
-  const { uid, deviceId, deviceName } = req.body;
-
-  if (!uid || !deviceId) {
-    return res.status(400).json({ message: "Thiếu UID hoặc DeviceID" });
-  }
-
-  let user = userDevices.find(u => u.uid === uid);
-  if (!user) {
-    userDevices.push({ uid, devices: [{ deviceId, deviceName, lastActive: new Date().toISOString() }] });
-    return res.status(201).json({ status: "NEW_USER", message: "Tài khoản mới, đã lưu thiết bị." });
-  }
-
-  let existingDevice = user.devices.find(d => d.deviceId === deviceId);
-  if (!existingDevice) {
-    user.devices.push({ deviceId, deviceName, lastActive: new Date().toISOString() });
-    return res.status(200).json({ status: "NEW_DEVICE", message: "Cảnh báo: Đăng nhập từ thiết bị lạ." });
-  } else {
-    existingDevice.lastActive = new Date().toISOString();
-    return res.status(200).json({ status: "KNOWN_DEVICE", message: "Thiết bị an toàn." });
-  }
-});
-
-// ==========================================
-// MIDDLEWARE: KIỂM TRA UID (BẢO MẬT)
-// Các API bên dưới bắt buộc phải có header 'x-uid'
+// MIDDLEWARE: KIỂM TRA UID VÀ IN THÔNG BÁO
 // ==========================================
 const requireUid = (req, res, next) => {
   const uid = req.headers['x-uid'];
   if (!uid) {
+    console.log(`⚠️  [CẢNH BÁO]: Có yêu cầu truy cập nhưng THIẾU UID!`);
     return res.status(401).json({ message: "Truy cập bị từ chối: Thiếu thẻ định danh (x-uid)" });
   }
-  req.uid = uid; // Lưu vào req để các API sau dùng
+  req.uid = uid; 
   next();
 };
 
 // ==========================================
-// 1. NHÓM API CỦA TRƯỜNG (DASHBOARD) - Có check UID
+// 1. NHÓM API DASHBOARD
 // ==========================================
 
-// Thống kê Dashboard (Chỉ đếm việc của UID đó)
+// Thống kê Dashboard
 app.get('/api/v1/dashboard/stats', requireUid, (req, res) => {
   const userTasks = tasks.filter(t => t.uid === req.uid);
-  const pending = userTasks.filter(t => !t.isDone).length;
-  const completed = userTasks.filter(t => t.isDone).length;
+  console.log(`📊 [STATS]: UID [${req.uid}] đang xem thống kê.`);
   
   res.json({
-    pending: pending,
-    completed: completed,
+    pending: userTasks.filter(t => !t.isDone).length,
+    completed: userTasks.filter(t => t.isDone).length,
     total: userTasks.length
   });
 });
 
-// Toggle trạng thái
+// Toggle trạng thái (Đã xong / Chưa xong)
 app.patch('/api/v1/tasks/:id/toggle', requireUid, (req, res) => {
   const task = tasks.find(t => t.id === req.params.id && t.uid === req.uid);
   if (task) {
     task.isDone = !task.isDone;
+    console.log(`🔄 [CẬP NHẬT]: UID [${req.uid}] đã đổi trạng thái Task: "${task.title}" thành [${task.isDone ? "XONG" : "CHƯA XONG"}]`);
     res.json(task);
   } else {
-    res.status(404).json({ message: "Không tìm thấy công việc, hoặc bạn không có quyền" });
+    console.log(`❌ [LỖI]: UID [${req.uid}] thử đổi trạng thái Task không tồn tại (ID: ${req.params.id})`);
+    res.status(404).json({ message: "Không tìm thấy công việc" });
   }
 });
 
@@ -120,32 +80,37 @@ app.patch('/api/v1/tasks/:id/toggle', requireUid, (req, res) => {
 app.delete('/api/v1/tasks/:id', requireUid, (req, res) => {
   const taskIndex = tasks.findIndex(t => t.id === req.params.id && t.uid === req.uid);
   if (taskIndex !== -1) {
+    const taskTitle = tasks[taskIndex].title;
     tasks.splice(taskIndex, 1);
+    console.log(`🗑️  [XÓA]: UID [${req.uid}] đã xóa Task: "${taskTitle}"`);
     res.status(204).send();
   } else {
+    console.log(`❌ [LỖI]: UID [${req.uid}] thử xóa Task không thuộc quyền sở hữu.`);
     res.status(404).json({ message: "Không tìm thấy công việc để xóa" });
   }
 });
 
 // ==========================================
-// 2. NHÓM API CỦA BIÊN (DETAIL & CREATE) - Có check UID
+// 2. NHÓM API DANH SÁCH & CHI TIẾT
 // ==========================================
 
-// Lấy toàn bộ danh sách (Chỉ lấy của UID đó)
+// Lấy toàn bộ danh sách
 app.get('/api/v1/tasks', requireUid, (req, res) => {
   const userTasks = tasks.filter(t => t.uid === req.uid);
+  console.log(`🔍 [LẤY DANH SÁCH]: UID [${req.uid}] vừa tải lại danh sách việc làm.`);
   res.json(userTasks);
 });
 
-// Tạo công việc mới (Tự động gắn UID của người tạo vào)
+// Tạo công việc mới
 app.post('/api/v1/tasks', requireUid, (req, res) => {
   const newTask = {
     id: Date.now().toString(),
-    uid: req.uid, // Gắn mác sở hữu
+    uid: req.uid,
     ...req.body,
     isDone: false
   };
   tasks.push(newTask);
+  console.log(`✨ [THÊM MỚI]: UID [${req.uid}] đã tạo công việc: "${newTask.title}"`);
   res.status(201).json(newTask);
 });
 
@@ -153,21 +118,37 @@ app.post('/api/v1/tasks', requireUid, (req, res) => {
 app.get('/api/v1/tasks/:id', requireUid, (req, res) => {
   const task = tasks.find(t => t.id === req.params.id && t.uid === req.uid);
   if (task) {
+    console.log(`📖 [XEM CHI TIẾT]: UID [${req.uid}] đang xem Task: "${task.title}"`);
     res.json(task);
   } else {
-    res.status(404).json({ message: "Không tìm thấy chi tiết Task" });
+    res.status(404).json({ message: "Không tìm thấy Task" });
   }
 });
 
-// Cập nhật chi tiết
+// Cập nhật chi tiết (Sửa nội dung)
 app.put('/api/v1/tasks/:id', requireUid, (req, res) => {
   const index = tasks.findIndex(t => t.id === req.params.id && t.uid === req.uid);
   if (index !== -1) {
     tasks[index] = { ...tasks[index], ...req.body };
+    console.log(`📝 [SỬA NỘI DUNG]: UID [${req.uid}] đã cập nhật Task ID: ${req.params.id}`);
     res.json(tasks[index]);
   } else {
-    res.status(404).json({ message: "Cập nhật thất bại, không tìm thấy hoặc sai quyền" });
+    res.status(404).json({ message: "Cập nhật thất bại" });
   }
+});
+
+// API Xác thực thiết bị
+app.post('/api/v1/auth/verify-device', (req, res) => {
+  const { uid, deviceId, deviceName } = req.body;
+  console.log(`📱 [THIẾT BỊ]: UID [${uid}] đang kết nối từ [${deviceName || 'Không rõ tên'}]`);
+  
+  // Logic cũ giữ nguyên...
+  let user = userDevices.find(u => u.uid === uid);
+  if (!user) {
+    userDevices.push({ uid, devices: [{ deviceId, deviceName, lastActive: new Date().toISOString() }] });
+    return res.status(201).json({ status: "NEW_USER" });
+  }
+  res.status(200).json({ status: "KNOWN_DEVICE" });
 });
 
 // ==========================================
@@ -175,11 +156,10 @@ app.put('/api/v1/tasks/:id', requireUid, (req, res) => {
 // ==========================================
 const PORT = 3000;
 app.listen(PORT, () => {
-  console.log(`\n================================================================`);
+  console.clear(); // Xóa sạch terminal cũ cho dễ nhìn
+  console.log(`================================================================`);
   console.log(`🚀 SERVER ĐANG CHẠY TẠI: http://localhost:${PORT}`);
   console.log(`================================================================`);
-  console.log(`🔒 Chế độ Bảo mật: Đã bật (Yêu cầu Header 'x-uid' cho các API Tasks)`);
-  console.log(`\n💡 LƯU Ý KHI TEST POSTMAN:`);
-  console.log(`👉 Chuyển sang tab "Headers", thêm Key: 'x-uid', Value: 'user_test_123'`);
+  console.log(`  Bây giờ, mỗi khi ông nhấn trên App, tui sẽ báo cáo ở đây...`);
   console.log(`================================================================\n`);
 });

@@ -50,7 +50,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _loadData();
   }
 
-  // Hàm tải dữ liệu đã fix để không bị kẹt vòng xoay
+  // Hàm tải dữ liệu
   Future<void> _loadData() async {
     try {
       final data = await ApiService.fetchTasks();
@@ -429,14 +429,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Icon(Icons.person, size: 45, color: Colors.white),
           ),
           const SizedBox(height: 15),
-          const Text(
-            "NHÓM 21",
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+
+          // --- PHẦN SỬA: TỰ ĐỘNG HIỆN UID ---
+          FutureBuilder<String>(
+            future: ApiService.getUid(),
+            builder: (context, snapshot) {
+              final uid = snapshot.data ?? "Đang tải...";
+              if (snapshot.hasData) {
+                // In ra Terminal mỗi khi Dashboard khởi động
+                debugPrint("\n==============================");
+                debugPrint("UID CỦA BẠN LÀ: $uid");
+                debugPrint("==============================\n");
+              }
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 15),
+                child: SelectableText(
+                  uid,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+              );
+            },
           ),
+
+          // ---------------------------------
           const SizedBox(height: 40),
           _sidebarItem(Icons.all_inbox, "Tất cả"),
           _sidebarItem(Icons.star_outline, "Quan trọng"),
