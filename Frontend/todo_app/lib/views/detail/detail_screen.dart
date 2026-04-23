@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class DetailScreen extends StatefulWidget {
-  // MỚI: Thêm biến này để nhận danh sách dự án từ màn hình chính truyền sang
   final List<String> existingProjects;
 
   const DetailScreen({super.key, this.existingProjects = const []});
@@ -12,7 +11,6 @@ class DetailScreen extends StatefulWidget {
 }
 
 class _DetailScreenState extends State<DetailScreen> {
-  // 1. CÁC CONTROLLER QUẢN LÝ DỮ LIỆU
   final _titleController = TextEditingController();
   final _projectController = TextEditingController();
 
@@ -20,7 +18,6 @@ class _DetailScreenState extends State<DetailScreen> {
   TimeOfDay _selectedTime = TimeOfDay.now();
   String _priority = 'Trung bình';
 
-  // Chọn Ngày & Giờ
   Future<void> _pickDateTime() async {
     DateTime? date = await showDatePicker(
       context: context,
@@ -41,6 +38,7 @@ class _DetailScreenState extends State<DetailScreen> {
         context: context,
         initialTime: _selectedTime,
       );
+      if (!mounted) return;
       if (time != null) {
         setState(() {
           _selectedDate = date;
@@ -68,7 +66,6 @@ class _DetailScreenState extends State<DetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- TÊN CÔNG VIỆC ---
               const Text(
                 "Tên công việc",
                 style: TextStyle(
@@ -91,7 +88,6 @@ class _DetailScreenState extends State<DetailScreen> {
               ),
               const SizedBox(height: 20),
 
-              // --- TÊN DỰ ÁN (SỬ DỤNG DROPDOWNMENU ĐỂ VỪA CHỌN VỪA GÕ) ---
               const Text(
                 "Thuộc dự án / Nhóm việc",
                 style: TextStyle(
@@ -104,8 +100,7 @@ class _DetailScreenState extends State<DetailScreen> {
                 builder: (context, constraints) {
                   return DropdownMenu<String>(
                     controller: _projectController,
-                    width: constraints
-                        .maxWidth, // Căn chiều rộng bằng với TextField
+                    width: constraints.maxWidth,
                     hintText: 'Chọn dự án cũ hoặc gõ tên mới...',
                     inputDecorationTheme: InputDecorationTheme(
                       filled: true,
@@ -128,7 +123,6 @@ class _DetailScreenState extends State<DetailScreen> {
               ),
               const SizedBox(height: 20),
 
-              // --- THỜI HẠN (NGÀY & GIỜ) ---
               const Text(
                 "Thời hạn",
                 style: TextStyle(
@@ -156,7 +150,6 @@ class _DetailScreenState extends State<DetailScreen> {
               ),
               const SizedBox(height: 20),
 
-              // --- MỨC ĐỘ ƯU TIÊN ---
               const Text(
                 "Mức độ ưu tiên",
                 style: TextStyle(
@@ -195,7 +188,6 @@ class _DetailScreenState extends State<DetailScreen> {
               ),
               const SizedBox(height: 40),
 
-              // --- NÚT LƯU ---
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 55),
@@ -214,10 +206,8 @@ class _DetailScreenState extends State<DetailScreen> {
                     return;
                   }
 
-                  // TRẢ DỮ LIỆU VỀ CHO MÀN HÌNH CHÍNH
                   Navigator.pop(context, {
                     'title': _titleController.text,
-                    // Lấy text hiện tại (chọn từ list hoặc tự gõ), nếu rỗng thì gom vào "Khác"
                     'projectName': _projectController.text.isNotEmpty
                         ? _projectController.text.trim()
                         : "Khác",

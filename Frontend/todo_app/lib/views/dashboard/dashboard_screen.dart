@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../detail/detail_screen.dart';
+import '../../services/api_service.dart';
 
 // --- MÔ HÌNH DỮ LIỆU TASK NÂNG CAO ---
 class TaskItem {
@@ -38,61 +39,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _selectedMenu = "Tất cả";
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = "";
-
-  // <-- THÊM MỚI: Biến lưu trạng thái đóng/mở của từng dự án
   final Map<String, bool> _expandedStates = {};
 
-  // DỮ LIỆU GIẢ LẬP ĐẦY ĐỦ (MOCK DATA)
-  List<TaskItem> myTasks = [
-    TaskItem(
-      id: "1",
-      title: "Thiết kế UI Dashboard BTL",
-      deadline: "Hôm nay, 14:00",
-      category: "Học tập",
-      projectName: "Dự án BTL Flutter",
-      catColor: Colors.blue,
-      isImportant: true,
-      hasReminder: true,
-    ),
-    TaskItem(
-      id: "2",
-      title: "Gửi báo cáo giữa kỳ cho thầy",
-      deadline: "Mai, 09:00",
-      category: "Việc gấp",
-      projectName: "Dự án BTL Flutter",
-      catColor: Colors.red,
-      isImportant: true,
-      hasReminder: true,
-    ),
-    TaskItem(
-      id: "3",
-      title: "Lau dọn phòng ngủ",
-      deadline: "Hôm nay, 18:00",
-      category: "Cá nhân",
-      projectName: "Việc nhà",
-      catColor: Colors.green,
-      hasReminder: false,
-      isDone: true,
-    ),
-    TaskItem(
-      id: "4",
-      title: "Đi siêu thị mua đồ ăn",
-      deadline: "Hôm nay, 20:00",
-      category: "Cá nhân",
-      projectName: "Việc nhà",
-      catColor: Colors.green,
-      hasReminder: true,
-    ),
-    TaskItem(
-      id: "5",
-      title: "Làm slide thuyết trình",
-      deadline: "Tuần sau",
-      category: "Học tập",
-      projectName: "Môn Kỹ năng mềm",
-      catColor: Colors.purple,
-      hasReminder: false,
-    ),
-  ];
+  List<TaskItem> myTasks = [];
+  bool isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  // Hàm tải dữ liệu đã fix để không bị kẹt vòng xoay
+  Future<void> _loadData() async {
+    try {
+      final data = await ApiService.fetchTasks();
+      setState(() {
+        myTasks = data.map((item) {
+          bool isImp = item['isImportant'] == 1 || item['isImportant'] == true;
+          bool isD = item['isDone'] == 1 || item['isDone'] == true;
+
+          return TaskItem(
+            id: item['id'].toString(),
+            title: item['title']?.toString() ?? '',
+            deadline: item['deadline']?.toString() ?? '',
+            projectName: item['projectName']?.toString() ?? 'Việc cá nhân khác',
+            category:
+                item['category']?.toString() ??
+                (isImp ? "Việc gấp" : "Học tập"),
+            catColor: isImp ? Colors.red : Colors.blue,
+            isImportant: isImp,
+            hasReminder:
+                item['hasReminder'] == 1 || item['hasReminder'] == true,
+            isDone: isD,
+          );
+        }).toList();
+        isLoading = false;
+      });
+    } catch (e) {
+      debugPrint("Lỗi load data: $e");
+      setState(() {
+        isLoading = false;
+        myTasks = [];
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -101,15 +92,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       bool matchesSearch = task.title.toLowerCase().contains(
         _searchQuery.toLowerCase(),
       );
-
       bool matchesMenu = true;
       if (_selectedMenu == "Quan trọng") matchesMenu = task.isImportant;
       if (_selectedMenu == "Sắp đến hạn") matchesMenu = !task.isDone;
-
       return matchesSearch && matchesMenu;
     }).toList();
 
-    // 2. GOM NHÓM THEO TÊN DỰ ÁN (PROJECT NAME)
+    // 2. GOM NHÓM THEO TÊN DỰ ÁN
     Map<String, List<TaskItem>> groupedTasks = {};
     for (var task in displayTasks) {
       if (!groupedTasks.containsKey(task.projectName)) {
@@ -144,78 +133,91 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 15),
 
-                  // 3. HIỂN THỊ DANH SÁCH DẠNG XỔ XUỐNG (ACCORDION)
+                  // 3. HIỂN THỊ DANH SÁCH
                   Expanded(
-                    child: ListView.builder(
-                      itemCount: groupedTasks.keys.length,
-                      itemBuilder: (context, index) {
-                        String project = groupedTasks.keys.elementAt(index);
-                        List<TaskItem> tasksInProject = groupedTasks[project]!;
+                    child: isLoading
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.blueAccent,
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: _loadData,
+                            child: ListView.builder(
+                              itemCount: groupedTasks.keys.length,
+                              itemBuilder: (context, index) {
+                                String project = groupedTasks.keys.elementAt(
+                                  index,
+                                );
+                                List<TaskItem> tasksInProject =
+                                    groupedTasks[project]!;
 
-                        return Theme(
-                          data: Theme.of(
-                            context,
-                          ).copyWith(dividerColor: Colors.transparent),
-                          child: ExpansionTile(
-                            // <-- SỬA Ở ĐÂY: Thêm Key và Logic nhớ trạng thái
-                            key: Key(project),
-                            initiallyExpanded:
-                                _expandedStates[project] ??
-                                true, // Lấy trạng thái đã lưu, nếu chưa có thì mặc định mở (true)
-                            onExpansionChanged: (isExpanded) {
-                              _expandedStates[project] =
-                                  isExpanded; // Lưu lại trạng thái khi ông bấm thu/phóng
-                            },
-                            iconColor: Colors.blueAccent,
-                            collapsedIconColor: Colors.grey,
-                            tilePadding: const EdgeInsets.symmetric(
-                              horizontal: 0,
-                            ),
-                            title: Row(
-                              children: [
-                                const Icon(
-                                  Icons.folder_open,
-                                  color: Colors.blueAccent,
-                                ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  project,
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.black87,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey[200],
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    "${tasksInProject.length}",
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
+                                return Theme(
+                                  data: Theme.of(
+                                    context,
+                                  ).copyWith(dividerColor: Colors.transparent),
+                                  child: ExpansionTile(
+                                    key: Key(project),
+                                    initiallyExpanded:
+                                        _expandedStates[project] ?? true,
+                                    onExpansionChanged: (isExpanded) {
+                                      _expandedStates[project] = isExpanded;
+                                    },
+                                    iconColor: Colors.blueAccent,
+                                    collapsedIconColor: Colors.grey,
+                                    tilePadding: const EdgeInsets.symmetric(
+                                      horizontal: 0,
                                     ),
+                                    title: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.folder_open,
+                                          color: Colors.blueAccent,
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          project,
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey[200],
+                                            borderRadius: BorderRadius.circular(
+                                              10,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            "${tasksInProject.length}",
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    children: tasksInProject.map((task) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 12.0,
+                                        ),
+                                        child: _buildAdvancedTaskCard(task),
+                                      );
+                                    }).toList(),
                                   ),
-                                ),
-                              ],
+                                );
+                              },
                             ),
-                            children: tasksInProject.map((task) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 12.0),
-                                child: _buildAdvancedTaskCard(task),
-                              );
-                            }).toList(),
                           ),
-                        );
-                      },
-                    ),
                   ),
                 ],
               ),
@@ -234,23 +236,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
 
           if (result != null && result is Map) {
-            setState(() {
-              myTasks.insert(
-                0,
-                TaskItem(
-                  id: DateTime.now().toString(),
-                  title: result['title'],
-                  deadline: result['deadline'],
-                  projectName: result['projectName']?.isNotEmpty == true
-                      ? result['projectName']
-                      : "Việc cá nhân khác",
-                  category: result['isImportant'] ? "Việc gấp" : "Học tập",
-                  catColor: result['isImportant'] ? Colors.red : Colors.blue,
-                  isImportant: result['isImportant'],
-                  hasReminder: true,
-                ),
-              );
+            await ApiService.addTask({
+              'title': result['title'],
+              'deadline': result['deadline'],
+              'projectName': result['projectName']?.isNotEmpty == true
+                  ? result['projectName']
+                  : "Việc cá nhân khác",
+              'category': result['isImportant'] ? "Việc gấp" : "Học tập",
+              'isImportant': result['isImportant'] ? 1 : 0,
+              'hasReminder': 1,
+              'isDone': 0,
             });
+
+            _loadData();
           }
         },
         backgroundColor: Colors.blueAccent,
@@ -262,6 +260,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
+
+  // --- UI COMPONENTS ---
 
   Widget _buildAdvancedTaskCard(TaskItem task) {
     return Dismissible(
@@ -276,13 +276,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         child: const Icon(Icons.delete_sweep, color: Colors.white, size: 28),
       ),
-      onDismissed: (direction) {
-        setState(() {
-          myTasks.remove(task);
-        });
+      onDismissed: (direction) async {
+        setState(() => myTasks.remove(task));
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text(' Đã xóa: "${task.title}"')));
+
+        await ApiService.deleteTask(task.id);
       },
       child: Container(
         decoration: BoxDecoration(
@@ -305,10 +305,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             value: task.isDone,
             activeColor: Colors.green,
             shape: const CircleBorder(),
-            onChanged: (bool? newValue) {
-              setState(() {
-                task.isDone = newValue ?? false;
-              });
+            onChanged: (bool? newValue) async {
+              setState(() => task.isDone = newValue ?? false);
+              await ApiService.updateTaskStatus(task.id, task.isDone);
             },
           ),
           title: Text(
@@ -394,11 +393,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           width: 300,
           child: TextField(
             controller: _searchController,
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-              });
-            },
+            onChanged: (value) => setState(() => _searchQuery = value),
             decoration: InputDecoration(
               hintText: "Tìm kiếm công việc...",
               prefixIcon: const Icon(Icons.search),
@@ -454,11 +449,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _sidebarItem(IconData icon, String title) {
     bool isSelected = _selectedMenu == title;
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedMenu = title;
-        });
-      },
+      onTap: () => setState(() => _selectedMenu = title),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
