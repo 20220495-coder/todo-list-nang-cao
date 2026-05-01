@@ -1,38 +1,11 @@
 const express = require('express');
 const cors = require('cors');
+const db = require('./database');
+
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-
-// ==========================================
-// CƠ SỞ DỮ LIỆU MẪU (LƯU TRONG RAM)
-// ==========================================
-let userDevices = [];
-let tasks = [
-  { 
-    id: "1",
-    uid: "user_test_123", 
-    title: "Làm bài tập Flutter", 
-    deadline: "10/04/2026", 
-    projectName: "Dự án App Todo", 
-    category: "Việc gấp",
-    isImportant: true, 
-    hasReminder: true,
-    isDone: false 
-  },
-  { 
-    id: "2", 
-    uid: "user_test_123", 
-    title: "Thiết kế Backend", 
-    deadline: "15/04/2026", 
-    projectName: "Dự án App Todo", 
-    category: "Học tập",
-    isImportant: false, 
-    hasReminder: false,
-    isDone: true 
-  }
-];
 
 // ==========================================
 // MIDDLEWARE: KIỂM TRA UID VÀ IN THÔNG BÁO
@@ -52,41 +25,51 @@ const requireUid = (req, res, next) => {
 // ==========================================
 
 // Thống kê Dashboard
-app.get('/api/v1/dashboard/stats', requireUid, (req, res) => {
-  const userTasks = tasks.filter(t => t.uid === req.uid);
-  console.log(`📊 [STATS]: UID [${req.uid}] đang xem thống kê.`);
-  
-  res.json({
-    pending: userTasks.filter(t => !t.isDone).length,
-    completed: userTasks.filter(t => t.isDone).length,
-    total: userTasks.length
-  });
+app.get('/api/v1/dashboard/stats', requireUid, async (req, res) => {
+  try {
+    const stats = await db.getTaskStats(req.uid);
+    console.log(`📊 [STATS]: UID [${req.uid}] đang xem thống kê.`);
+    res.json(stats);
+  } catch (err) {
+    console.log(`❌ [LỖI]: UID [${req.uid}] lỗi khi lấy thống kê:`, err.message);
+    res.status(500).json({ message: "Lỗi server" });
+  }
 });
 
 // Toggle trạng thái (Đã xong / Chưa xong)
-app.patch('/api/v1/tasks/:id/toggle', requireUid, (req, res) => {
-  const task = tasks.find(t => t.id === req.params.id && t.uid === req.uid);
-  if (task) {
-    task.isDone = !task.isDone;
-    console.log(`🔄 [CẬP NHẬT]: UID [${req.uid}] đã đổi trạng thái Task: "${task.title}" thành [${task.isDone ? "XONG" : "CHƯA XONG"}]`);
-    res.json(task);
-  } else {
-    console.log(`❌ [LỖI]: UID [${req.uid}] thử đổi trạng thái Task không tồn tại (ID: ${req.params.id})`);
-    res.status(404).json({ message: "Không tìm thấy công việc" });
+app.patch('/api/v1/tasks/:id/toggle', requireUid, async (req, res) => {
+  try {
+    const task = await db.getTaskById(req.params.id, req.uid);
+    if (!task) {
+      console.log(`❌ [LỖI]: UID [${req.uid}] thử đổi trạng thái Task không tồn tại (ID: ${req.params.id})`);
+      return res.status(404).json({ message: "Không tìm thấy công việc" });
+    }
+    
+    const newStatus = !task.isDone;
+    await db.updateTask(req.params.id, req.uid, { isDone: newStatus });
+    console.log(`🔄 [CẬP NHẬT]: UID [${req.uid}] đã đổi trạng thái Task: "${task.title}" thành [${newStatus ? "XONG" : "CHƯA XONG"}]`);
+    res.json({ ...task, isDone: newStatus });
+  } catch (err) {
+    console.log(`❌ [LỖI]: UID [${req.uid}] lỗi khi toggle Task:`, err.message);
+    res.status(500).json({ message: "Lỗi cập nhật" });
   }
 });
 
 // Xóa công việc
-app.delete('/api/v1/tasks/:id', requireUid, (req, res) => {
-  const taskIndex = tasks.findIndex(t => t.id === req.params.id && t.uid === req.uid);
-  if (taskIndex !== -1) {
-    const taskTitle = tasks[taskIndex].title;
-    tasks.splice(taskIndex, 1);
-    console.log(`🗑️  [XÓA]: UID [${req.uid}] đã xóa Task: "${taskTitle}"`);
+app.delete('/api/v1/tasks/:id', requireUid, async (req, res) => {
+  try {
+    const task = await db.getTaskById(req.params.id, req.uid);
+    if (!task) {
+      console.log(`❌ [LỖI]: UID [${req.uid}] thử xóa Task không thuộc quyền sở hữu.`);
+      return res.status(404).json({ message: "Không tìm thấy công việc để xóa" });
+    }
+    
+    await db.deleteTask(req.params.id, req.uid);
+    console.log(`🗑️  [XÓA]: UID [${req.uid}] đã xóa Task: "${task.title}"`);
     res.status(204).send();
-  } else {
-    console.log(`❌ [LỖI]: UID [${req.uid}] thử xóa Task không thuộc quyền sở hữu.`);
-    res.status(404).json({ message: "Không tìm thấy công việc để xóa" });
+  } catch (err) {
+    console.log(`❌ [LỖI]: UID [${req.uid}] lỗi khi xóa Task:`, err.message);
+    res.status(500).json({ message: "Lỗi xóa" });
   }
 });
 
@@ -95,60 +78,92 @@ app.delete('/api/v1/tasks/:id', requireUid, (req, res) => {
 // ==========================================
 
 // Lấy toàn bộ danh sách
-app.get('/api/v1/tasks', requireUid, (req, res) => {
-  const userTasks = tasks.filter(t => t.uid === req.uid);
-  console.log(`🔍 [LẤY DANH SÁCH]: UID [${req.uid}] vừa tải lại danh sách việc làm.`);
-  res.json(userTasks);
+app.get('/api/v1/tasks', requireUid, async (req, res) => {
+  try {
+    const tasks = await db.getAllTasks(req.uid);
+    console.log(`🔍 [LẤY DANH SÁCH]: UID [${req.uid}] vừa tải lại danh sách việc làm.`);
+    res.json(tasks);
+  } catch (err) {
+    console.log(`❌ [LỖI]: UID [${req.uid}] lỗi khi lấy danh sách:`, err.message);
+    res.status(500).json({ message: "Lỗi server" });
+  }
 });
 
 // Tạo công việc mới
-app.post('/api/v1/tasks', requireUid, (req, res) => {
-  const newTask = {
-    id: Date.now().toString(),
-    uid: req.uid,
-    ...req.body,
-    isDone: false
-  };
-  tasks.push(newTask);
-  console.log(`✨ [THÊM MỚI]: UID [${req.uid}] đã tạo công việc: "${newTask.title}"`);
-  res.status(201).json(newTask);
+app.post('/api/v1/tasks', requireUid, async (req, res) => {
+  try {
+    const newTask = {
+      id: Date.now().toString(),
+      uid: req.uid,
+      title: req.body.title || '',
+      deadline: req.body.deadline || null,
+      projectName: req.body.projectName || null,
+      category: req.body.category || null,
+      isImportant: req.body.isImportant || false,
+      hasReminder: req.body.hasReminder || false,
+      isDone: false
+    };
+    
+    console.log(`📋 [DỮ LIỆU CẦN LƯU]: `, newTask);
+    
+    const created = await db.createTask(newTask);
+    console.log(`✨ [THÊM MỚI]: UID [${req.uid}] đã tạo công việc: "${newTask.title}"`);
+    console.log(`✅ [THÀNH CÔNG]: Task được lưu vào Database với ID: ${newTask.id}`);
+    
+    res.status(201).json(created);
+  } catch (err) {
+    console.log(`❌ [LỖI]: UID [${req.uid}] lỗi khi tạo Task:`, err.message);
+    console.log(`❌ [LỖI CHI TIẾT]:`, err);
+    res.status(500).json({ message: "Lỗi tạo công việc", error: err.message });
+  }
 });
 
 // Xem chi tiết
-app.get('/api/v1/tasks/:id', requireUid, (req, res) => {
-  const task = tasks.find(t => t.id === req.params.id && t.uid === req.uid);
-  if (task) {
+app.get('/api/v1/tasks/:id', requireUid, async (req, res) => {
+  try {
+    const task = await db.getTaskById(req.params.id, req.uid);
+    if (!task) {
+      console.log(`❌ [LỖI]: UID [${req.uid}] thử xem Task không tồn tại (ID: ${req.params.id})`);
+      return res.status(404).json({ message: "Không tìm thấy Task" });
+    }
     console.log(`📖 [XEM CHI TIẾT]: UID [${req.uid}] đang xem Task: "${task.title}"`);
     res.json(task);
-  } else {
-    res.status(404).json({ message: "Không tìm thấy Task" });
+  } catch (err) {
+    console.log(`❌ [LỖI]: UID [${req.uid}] lỗi khi xem Task:`, err.message);
+    res.status(500).json({ message: "Lỗi server" });
   }
 });
 
 // Cập nhật chi tiết (Sửa nội dung)
-app.put('/api/v1/tasks/:id', requireUid, (req, res) => {
-  const index = tasks.findIndex(t => t.id === req.params.id && t.uid === req.uid);
-  if (index !== -1) {
-    tasks[index] = { ...tasks[index], ...req.body };
+app.put('/api/v1/tasks/:id', requireUid, async (req, res) => {
+  try {
+    const task = await db.getTaskById(req.params.id, req.uid);
+    if (!task) {
+      console.log(`❌ [LỖI]: UID [${req.uid}] thử sửa Task không tồn tại (ID: ${req.params.id})`);
+      return res.status(404).json({ message: "Cập nhật thất bại" });
+    }
+    
+    const updated = await db.updateTask(req.params.id, req.uid, req.body);
     console.log(`📝 [SỬA NỘI DUNG]: UID [${req.uid}] đã cập nhật Task ID: ${req.params.id}`);
-    res.json(tasks[index]);
-  } else {
-    res.status(404).json({ message: "Cập nhật thất bại" });
+    res.json(updated);
+  } catch (err) {
+    console.log(`❌ [LỖI]: UID [${req.uid}] lỗi khi cập nhật Task:`, err.message);
+    res.status(500).json({ message: "Lỗi cập nhật" });
   }
 });
 
 // API Xác thực thiết bị
-app.post('/api/v1/auth/verify-device', (req, res) => {
+app.post('/api/v1/auth/verify-device', async (req, res) => {
   const { uid, deviceId, deviceName } = req.body;
   console.log(`📱 [THIẾT BỊ]: UID [${uid}] đang kết nối từ [${deviceName || 'Không rõ tên'}]`);
   
-  // Logic cũ giữ nguyên...
-  let user = userDevices.find(u => u.uid === uid);
-  if (!user) {
-    userDevices.push({ uid, devices: [{ deviceId, deviceName, lastActive: new Date().toISOString() }] });
-    return res.status(201).json({ status: "NEW_USER" });
+  try {
+    const result = await db.verifyDevice(uid, deviceId, deviceName);
+    res.status(200).json(result);
+  } catch (err) {
+    console.log(`❌ [LỖI]: UID [${uid}] lỗi khi xác thực thiết bị:`, err.message);
+    res.status(500).json({ message: "Lỗi xác thực" });
   }
-  res.status(200).json({ status: "KNOWN_DEVICE" });
 });
 
 // ==========================================
@@ -156,9 +171,11 @@ app.post('/api/v1/auth/verify-device', (req, res) => {
 // ==========================================
 const PORT = 3000;
 app.listen(PORT, () => {
-  console.clear(); // Xóa sạch terminal cũ cho dễ nhìn
+  console.clear();
   console.log(`================================================================`);
   console.log(`🚀 SERVER ĐANG CHẠY TẠI: http://localhost:${PORT}`);
+  console.log(`================================================================`);
+  console.log(`  Database: MySQL (XAMPP - todo_app)`);
   console.log(`================================================================`);
   console.log(`  Bây giờ, mỗi khi ông nhấn trên App, tui sẽ báo cáo ở đây...`);
   console.log(`================================================================\n`);

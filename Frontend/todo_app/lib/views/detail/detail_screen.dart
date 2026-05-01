@@ -214,6 +214,7 @@ class _DetailScreenState extends State<DetailScreen> {
                     'deadline':
                         "${DateFormat('dd/MM').format(_selectedDate)}, ${_selectedTime.format(context)}",
                     'isImportant': _priority == 'Cao',
+                    'category': _priority,
                   });
                 },
                 child: const Text(

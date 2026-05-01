@@ -58,15 +58,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         myTasks = data.map((item) {
           bool isImp = item['isImportant'] == 1 || item['isImportant'] == true;
           bool isD = item['isDone'] == 1 || item['isDone'] == true;
+          String category = item['category']?.toString() ?? '';
 
           return TaskItem(
             id: item['id'].toString(),
             title: item['title']?.toString() ?? '',
             deadline: item['deadline']?.toString() ?? '',
             projectName: item['projectName']?.toString() ?? 'Việc cá nhân khác',
-            category:
-                item['category']?.toString() ??
-                (isImp ? "Việc gấp" : "Học tập"),
+            category: category,
             catColor: isImp ? Colors.red : Colors.blue,
             isImportant: isImp,
             hasReminder:
@@ -236,19 +235,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
           );
 
           if (result != null && result is Map) {
-            await ApiService.addTask({
+            // Hiển thị loading indicator
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Đang lưu công việc...'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+
+            final success = await ApiService.addTask({
               'title': result['title'],
               'deadline': result['deadline'],
               'projectName': result['projectName']?.isNotEmpty == true
                   ? result['projectName']
                   : "Việc cá nhân khác",
-              'category': result['isImportant'] ? "Việc gấp" : "Học tập",
+              'category': result['category'] ?? 'Khác',
               'isImportant': result['isImportant'] ? 1 : 0,
               'hasReminder': 1,
               'isDone': 0,
             });
 
-            _loadData();
+            if (success) {
+              // Đợi một chút để database lưu dữ liệu xong
+              await Future.delayed(const Duration(milliseconds: 500));
+              await _loadData();
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('✅ Đã thêm: "${result['title']}"'),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            } else {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('❌ Lỗi lưu công việc. Kiểm tra Backend!'),
+                    duration: Duration(seconds: 3),
+                  ),
+                );
+              }
+            }
           }
         },
         backgroundColor: Colors.blueAccent,
@@ -259,6 +287,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
     );
+  }
+
+  // --- HÀM CHUYỂN ĐỔI CATEGORY LABEL ---
+  String _getCategoryLabel(String category) {
+    switch (category) {
+      case 'Thấp':
+        return 'Duy trì';
+      case 'Trung bình':
+        return 'Ưu tiên';
+      case 'Cao':
+        return 'Việc gấp';
+      default:
+        return category;
+    }
   }
 
   // --- UI COMPONENTS ---
@@ -358,7 +400,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  task.category,
+                  _getCategoryLabel(task.category),
                   style: TextStyle(
                     color: task.catColor,
                     fontSize: 11,

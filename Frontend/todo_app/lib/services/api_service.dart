@@ -42,17 +42,25 @@ class ApiService {
   static Future<List<dynamic>> fetchTasks() async {
     final uid = await getUid();
     try {
+      print("🔍 Đang lấy danh sách Task cho UID: $uid");
       final response = await http.get(
         Uri.parse('$baseUrl/tasks'),
         headers: {'x-uid': uid}, // Nhét thẻ định danh vào đây
       );
 
+      print("📥 Fetch tasks status: ${response.statusCode}");
+
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        print("✅ Tải được ${(data as List).length} task");
+        return data;
+      } else {
+        print("❌ Lỗi lấy danh sách - Status: ${response.statusCode}");
+        print("Response: ${response.body}");
       }
       return [];
     } catch (e) {
-      print("Lỗi kết nối Backend: $e");
+      print("❌ Lỗi kết nối Backend: $e");
       return [];
     }
   }
@@ -61,14 +69,26 @@ class ApiService {
   static Future<bool> addTask(Map<String, dynamic> taskData) async {
     final uid = await getUid();
     try {
+      print("📤 Đang gửi Task đến backend: $taskData");
       final response = await http.post(
         Uri.parse('$baseUrl/tasks'),
         headers: {'Content-Type': 'application/json', 'x-uid': uid},
         body: jsonEncode(taskData),
       );
-      return response.statusCode == 201;
+
+      print("📥 Response status: ${response.statusCode}");
+      print("📥 Response body: ${response.body}");
+
+      if (response.statusCode == 201) {
+        print("✅ Task được tạo thành công!");
+        return true;
+      } else {
+        print("❌ Lỗi khi tạo Task - Status: ${response.statusCode}");
+        print("Response: ${response.body}");
+        return false;
+      }
     } catch (e) {
-      print("Lỗi tạo Task: $e");
+      print("❌ Lỗi kết nối khi tạo Task: $e");
       return false;
     }
   }
